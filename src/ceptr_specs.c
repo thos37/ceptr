@@ -1,4 +1,5 @@
 #include "ceptr.h"
+#include "dump.h"
 #include <stdio.h>
 #include <signal.h>
 #include <assert.h>
@@ -66,10 +67,10 @@ int *_make_string(Receptor *r,Symbol STAR_LOCATION,Symbol *CONSTELLATION){
     struct {
         int point1X;
         int point1Y;
-	int escape;
+        int escape;
         int point2X;
         int point2Y;
-	int escape2;
+        int escape2;
         int point3X;
         int point3Y;
         int term;
@@ -88,7 +89,7 @@ void testString() {
 }
 
 void testPoint() {
-     Receptor tr;init(&tr);Receptor *r = &tr;
+    Receptor tr;init(&tr);Receptor *r = &tr;
 
     Symbol HERE = op_new_noun(r, r->pointPatternSpecXaddr, "HERE");
     int value[2] = {777, 422};
