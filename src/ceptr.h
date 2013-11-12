@@ -96,6 +96,7 @@ typedef struct {
     Xaddr intPatternSpecXaddr;
     Xaddr pointPatternSpecXaddr;
     Xaddr linePatternSpecXaddr;
+    Symbol cspec;
 
     ElementSurface builtin_element_surfaces[BUILTIN_ELEMENT_COUNT];
     Data data;
@@ -125,7 +126,8 @@ Process *getProcess(ElementSurface *es, FunctionName name) {
 }
 
 enum Symbols {
-    NULL_SYMBOL = -1, CSPEC = -2, NOUN_SPEC = -3, PATTERN_SPEC = -4,  ARRAY_SPEC = -5, STRING_SPEC = -6
+    NULL_SYMBOL = -1, CSPEC = -2, NOUN_SPEC = -3, PATTERN_SPEC = -4,  ARRAY_SPEC = -5,
+    STRING_SPEC = -6, NULL_SPEC = -7
 };
 
 void dump_xaddrs(Receptor *r);
@@ -137,7 +139,7 @@ void *_find_builtin_element_spec(Receptor *r, Symbol name) {
             return &r->builtin_element_surfaces[i];
         }
     }
-    raise_error("unknown builtin element type %d", name);
+    raise_error("unknown builtin element type %d \n", name);
     return 0;
 }
 
@@ -149,21 +151,20 @@ void *_get_noun_element_spec(Receptor *r, Symbol *nounType, Symbol noun){
             case ARRAY_SPEC:
             case PATTERN_SPEC:
             case NOUN_SPEC:
-                key = CSPEC;
+                *nounType = r->cspec;
                 break;
             case CSPEC:
-                key = NULL_SYMBOL;
+                raise_error("what re you takling aboiut %d ??", 0);
                 break;
         }
+        key = *nounType;
+        return _find_builtin_element_spec(r, *nounType);
     } else {
         Xaddr *elementXaddr = &((NounSurface *) &r->data.cache[noun])->namedElement;
         *nounType = elementXaddr->noun;
         key = elementXaddr->key;
+        return &r->data.cache[key];
     }
-    if (key < 0) {
-        return _find_builtin_element_spec(r, key);
-    }
-    return &r->data.cache[key];
 }
 
 ElementSurface *_get_noun_pattern_spec(Receptor *r, Symbol noun) {
@@ -276,15 +277,15 @@ void dump_noun(Receptor *r, NounSurface *ns);
 
 
 size_t _new_get_noun_size(Receptor *r, Symbol noun, void *surface) {
-printf("--->_get_noun_size: %d\n", noun);
     Xaddr nounXaddr = { noun, NOUN_SPEC };
-//    dump_noun(r, (NounSurface *)op_get(r, nounXaddr));
+    //    dump_noun(r, (NounSurface *)op_get(r, nounXaddr));
     Symbol nounType;
     ElementSurface *spec_surface = _get_noun_element_spec(r, &nounType, noun);
-    if (getProcess(spec_surface, GET_SIZE)){
-
-        return (getProcess(spec_surface, GET_SIZE)->function)(r, noun, surface);
+    Process *p = getProcess(spec_surface, GET_SIZE);
+    if (p){
+        return (p->function)(r, noun, surface);
     } else {
+        dump_xaddrs(r);
         raise_error2("couldn't find size function for noun %d in element surface %d\n", noun, spec_surface->name);
         return 0;
     }
@@ -302,10 +303,10 @@ printf("_get_noun_size %d \n", noun);
 
     switch (nounType) {
         case PATTERN_SPEC:
-            return _new_get_noun_size(r, noun, surface);
+//            return _new_get_noun_size(r, noun, surface);
+            return proc_pattern_get_size(r, noun, surface);
 
         case ARRAY_SPEC:
-printf("looking up ARRAY_SPEC %d\n", noun);
 //            return _new_get_noun_size(r, noun, surface);
             return proc_array_get_size(r, noun, surface);
 
@@ -620,9 +621,12 @@ void init(Receptor *r) {
     Process string_spec_procs[] = {{GET_SIZE, (ProcessFunc)&proc_string_get_size }};
     Process cspec_spec_procs[] = {{GET_SIZE, (ProcessFunc)&proc_cspec_get_size }};
 
+    Xaddr null_spec = { NULL_SYMBOL, NULL_SYMBOL };
+
+    r->cspec = { null_spec, "CSPEC" };
+
     ElementSurface builtin_element_surfaces[] = {
-        { NULL_SYMBOL, 0 , {}},
-        { CSPEC, 1, cspec_spec_procs[0]},
+        { NULL_SPEC, 1, cspec_spec_procs[0]},
         { NOUN_SPEC, 0 , {}},
         { PATTERN_SPEC, 1, pattern_spec_procs[0]},
         { ARRAY_SPEC, 1, array_spec_procs[0] },
@@ -633,7 +637,6 @@ void init(Receptor *r) {
     r->builtin_element_surfaces[2] = builtin_element_surfaces[2];
     r->builtin_element_surfaces[3] = builtin_element_surfaces[3];
     r->builtin_element_surfaces[4] = builtin_element_surfaces[4];
-    r->builtin_element_surfaces[5] = builtin_element_surfaces[5];
 
 
     // INT
