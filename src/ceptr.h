@@ -90,15 +90,15 @@ typedef struct {
     char valStack[DEFAULT_CACHE_SIZE];
     int valStackPointer;
     //built in xaddrs:
+    Xaddr cspecXaddr;
+    Xaddr elementNounXaddr;
     Xaddr patternSpecXaddr;
     Xaddr arraySpecXaddr;
     Xaddr stringSpecXaddr;
     Xaddr intPatternSpecXaddr;
     Xaddr pointPatternSpecXaddr;
     Xaddr linePatternSpecXaddr;
-    Symbol cspec;
 
-    ElementSurface builtin_element_surfaces[BUILTIN_ELEMENT_COUNT];
     Data data;
 } Receptor;
 
@@ -125,40 +125,21 @@ Process *getProcess(ElementSurface *es, FunctionName name) {
     return 0;
 }
 
+#define PATTERN_SPEC r->patternSpecXaddr.key
+#define ARRAY_SPEC r->arraySpecXaddr.key
+#define STRING_SPEC r->stringSpecXaddr.key
+#define ELEMENT r->elementNounXaddr.key
+
 enum Symbols {
-    NULL_SYMBOL = -1, CSPEC = -2, NOUN_SPEC = -3, PATTERN_SPEC = -4,  ARRAY_SPEC = -5,
-    STRING_SPEC = -6, NULL_SPEC = -7
+    NULL_SYMBOL = -3, CSPEC = -2, NOUN_SPEC = -1
 };
 
 void dump_xaddrs(Receptor *r);
 
-void *_find_builtin_element_spec(Receptor *r, Symbol name) {
-    int i;
-    for (i=0; i< BUILTIN_ELEMENT_COUNT; i++){
-        if (r->builtin_element_surfaces[i].name == name){
-            return &r->builtin_element_surfaces[i];
-        }
-    }
-    raise_error("unknown builtin element type %d \n", name);
-    return 0;
-}
-
 void *_get_noun_element_spec(Receptor *r, Symbol *nounType, Symbol noun){
     Symbol key;
     if (noun < 0) {
-        switch(noun){
-            case STRING_SPEC:
-            case ARRAY_SPEC:
-            case PATTERN_SPEC:
-            case NOUN_SPEC:
-                *nounType = r->cspec;
-                break;
-            case CSPEC:
-                raise_error("what re you takling aboiut %d ??", 0);
-                break;
-        }
-        key = *nounType;
-        return _find_builtin_element_spec(r, *nounType);
+        raise_error("the spec for %d has no surface!\n",noun);
     } else {
         Xaddr *elementXaddr = &((NounSurface *) &r->data.cache[noun])->namedElement;
         *nounType = elementXaddr->noun;
@@ -198,10 +179,6 @@ void *op_get(Receptor *r, Xaddr xaddr) {
 
 ElementSurface *_get_reps_pattern_spec(Receptor *r,ElementSurface *rs) {
     return _get_noun_pattern_spec(r,REPS_GET_NOUN(rs));
-}
-
-size_t _get_pattern_spec_size(ElementSurface *es) {
-    return element_header_size(es) + sizeof(PatternBody) - sizeof(Offset) + sizeof(Offset) * PATTERN_GET_CHILDREN_COUNT(es);
 }
 
 #define _op_get_array_length(surface) (*((int*)surface))
@@ -277,11 +254,22 @@ void dump_noun(Receptor *r, NounSurface *ns);
 
 
 size_t _new_get_noun_size(Receptor *r, Symbol noun, void *surface) {
-    Xaddr nounXaddr = { noun, NOUN_SPEC };
-    //    dump_noun(r, (NounSurface *)op_get(r, nounXaddr));
+    if (noun < 0) {
+	switch (noun) {
+	case NOUN_SPEC:
+	    return sizeof(NounSurface);
+	    break;
+	}
+	raise(SIGINT);
+    }
     Symbol nounType;
     ElementSurface *spec_surface = _get_noun_element_spec(r, &nounType, noun);
-    Process *p = getProcess(spec_surface, GET_SIZE);
+    if (nounType == NULL_SYMBOL) {
+	return sizeof(ElementSurface);
+    }
+    Symbol nounSpecType;
+    ElementSurface *spec_spec_surface = _get_noun_element_spec(r, &nounSpecType, nounType);
+    Process *p = getProcess(spec_spec_surface, GET_SIZE);
     if (p){
         return (p->function)(r, noun, surface);
     } else {
@@ -291,7 +279,7 @@ size_t _new_get_noun_size(Receptor *r, Symbol noun, void *surface) {
     }
 }
 
-
+/*
 size_t _get_noun_size(Receptor *r, Symbol noun, void *surface) {
 printf("_get_noun_size %d \n", noun);
     if (noun < 0){
@@ -303,8 +291,8 @@ printf("_get_noun_size %d \n", noun);
 
     switch (nounType) {
         case PATTERN_SPEC:
-//            return _new_get_noun_size(r, noun, surface);
-            return proc_pattern_get_size(r, noun, surface);
+            return _new_get_noun_size(r, nounType, surface);
+	    //            return proc_pattern_get_size(r, noun, surface);
 
         case ARRAY_SPEC:
 //            return _new_get_noun_size(r, noun, surface);
@@ -317,6 +305,7 @@ printf("_get_noun_size %d \n", noun);
     return _new_get_noun_size(r, noun, surface);
 
 }
+*/
 
 void _record_existence(Receptor *r,size_t current_index,Symbol noun) {
     r->data.current_xaddr++;
@@ -345,14 +334,14 @@ void op_set(Receptor *r, Xaddr xaddr, void *value) {
     if (!sem_check(r, xaddr)) {
         raise_error("I do not think that word (%d) means what you think it means!\n", xaddr.noun);
     }
-    size_t size = _get_noun_size(r, xaddr.noun, value);
+    size_t size = _new_get_noun_size(r, xaddr.noun, value);
 
     memcpy(surface, value, size);
 }
 
 Xaddr op_new(Receptor *r, Symbol noun, void *surface) {
     size_t current_index = r->data.cache_index;
-    r->data.cache_index += _get_noun_size(r, noun, surface);
+    r->data.cache_index += _new_get_noun_size(r, noun, surface);
 
     _record_existence(r,current_index,noun);
 
@@ -361,20 +350,26 @@ Xaddr op_new(Receptor *r, Symbol noun, void *surface) {
     return new_xaddr;
 }
 
-void _init_element(Receptor *r, char *label,Symbol element_spec,ElementSurface *es,int processCount, Process *processes) {
+void _init_processes(Receptor *r,ElementSurface *es, int processCount, Process *processes) {
     int i;
-    Xaddr elemX;
-    elemX.key = element_spec;
-    elemX.noun = CSPEC;
-
-    es->name = op_new_noun(r, elemX, label);
     es->process_count = processCount;
     Process *p = &es->processes;
     for (i = 0; i < processCount; i++) {
-        p->name = processes[i].name;
-        p->function = processes[i].function;
-        p++;
+	p->name = processes[i].name;
+	p->function = processes[i].function;
+	p++;
     }
+}
+
+
+void _init_element(Receptor *r, char *label,Symbol element_spec,ElementSurface *es,int processCount, Process *processes) {
+
+    Xaddr elemX;
+    elemX.key = element_spec;
+    elemX.noun = ELEMENT;
+
+    es->name = op_new_noun(r, elemX, label);
+    _init_processes(r,es,processCount,processes);
 }
 
 void *op_get_array_nth(Receptor *r,int index, Xaddr rX) {
@@ -401,7 +396,7 @@ void *op_get_array_nth(Receptor *r,int index, Xaddr rX) {
         }
         else if (arrayItemType == ARRAY_SPEC) {
             while (index--) {
-                surface += _get_noun_size(r,repsNoun,surface);
+                surface += _new_get_noun_size(r,repsNoun,surface);
             }
         }
         else {raise_error("bad array item type %d\n",arrayItemType);}
@@ -457,6 +452,17 @@ Xaddr op_new_pattern(Receptor *r, char *label, int childCount, Xaddr *children, 
         PATTERN_SET_CHILDREN_COUNT(ps,childCount);
     }
     return op_new(r, PATTERN_SPEC, ps);
+}
+
+Xaddr _op_new_element(Receptor *r, char *label, ProcessFunc func) {
+    char ps[BUFFER_SIZE];
+    memset(ps, 0, BUFFER_SIZE);
+    int i;
+    Process procs[1];
+    procs[0].name = GET_SIZE;
+    procs[0].function = func;
+    _init_processes(r,(ElementSurface *)ps,1,procs);
+    return op_new(r,ELEMENT,ps);
 }
 
 ElementSurface *_get_pattern_spec(Receptor *r, Symbol patternName) {
@@ -590,54 +596,41 @@ Symbol getSymbol(Receptor *r, char *label) {
     return 0;
 }
 
-int proc_cspec_get_size(Receptor *r, Symbol noun, void*this){
+//
+int proc_cspec_get_size(Receptor *r, Symbol noun, void*surface){
     if (noun == PATTERN_SPEC) {
-        return _get_pattern_spec_size((ElementSurface *)this);
+	return element_header_size(surface) + sizeof(PatternBody) - sizeof(Offset) + sizeof(Offset) * PATTERN_GET_CHILDREN_COUNT(surface);
     } else if ((noun == ARRAY_SPEC) || (noun == STRING_SPEC)) {
-        return element_header_size(this) + sizeof(RepsBody);
+        return element_header_size(surface) + sizeof(RepsBody);
     }
     return 0;
 }
 
-void init(Receptor *r) {
+void init_data(Receptor *r) {
     int i;
     for (i = 0; i < DEFAULT_CACHE_SIZE; i++) r->data.xaddr_scape[i] = NULL_SYMBOL;
 
     r->data.cache_index = 0;
+    r->data.current_xaddr = -1;
+}
+
+void init_elements(Receptor *r) {
+    r->cspecXaddr.key = CSPEC;
+    r->cspecXaddr.noun = NULL_SYMBOL;
+    r->elementNounXaddr.key = op_new_noun(r, r->cspecXaddr, "ELEMENT");
+    r->elementNounXaddr.noun = CSPEC;
+    r->patternSpecXaddr = _op_new_element(r,"PATTERN_SPEC",(ProcessFunc)&proc_pattern_get_size);
+    r->arraySpecXaddr = _op_new_element(r,"ARRAY_SPEC",(ProcessFunc)&proc_array_get_size);
+    r->stringSpecXaddr = _op_new_element(r,"STRING_SPEC",(ProcessFunc)&proc_string_get_size);
+}
+
+void init(Receptor *r) {
+    init_data(r);
+    init_elements(r);
     r->semStackPointer = -1;
     r->valStackPointer = 0;
-    r->patternSpecXaddr.key = PATTERN_SPEC;
-    r->patternSpecXaddr.noun = CSPEC;
-    r->arraySpecXaddr.key = ARRAY_SPEC;
-    r->arraySpecXaddr.noun = CSPEC;
-    r->stringSpecXaddr.key = STRING_SPEC;
-    r->stringSpecXaddr.noun = CSPEC;
-    r->data.current_xaddr = -1;
 
     // ********************** bootstrap built in types
-
-    Process pattern_spec_procs[] = {{GET_SIZE, (ProcessFunc)&proc_pattern_get_size }};
-    Process array_spec_procs[] =  {{GET_SIZE, (ProcessFunc)&proc_array_get_size }};
-    Process string_spec_procs[] = {{GET_SIZE, (ProcessFunc)&proc_string_get_size }};
-    Process cspec_spec_procs[] = {{GET_SIZE, (ProcessFunc)&proc_cspec_get_size }};
-
-    Xaddr null_spec = { NULL_SYMBOL, NULL_SYMBOL };
-
-    r->cspec = { null_spec, "CSPEC" };
-
-    ElementSurface builtin_element_surfaces[] = {
-        { NULL_SPEC, 1, cspec_spec_procs[0]},
-        { NOUN_SPEC, 0 , {}},
-        { PATTERN_SPEC, 1, pattern_spec_procs[0]},
-        { ARRAY_SPEC, 1, array_spec_procs[0] },
-        { STRING_SPEC, 1, string_spec_procs[0] }
-    };
-    r->builtin_element_surfaces[0] = builtin_element_surfaces[0];
-    r->builtin_element_surfaces[1] = builtin_element_surfaces[1];
-    r->builtin_element_surfaces[2] = builtin_element_surfaces[2];
-    r->builtin_element_surfaces[3] = builtin_element_surfaces[3];
-    r->builtin_element_surfaces[4] = builtin_element_surfaces[4];
-
 
     // INT
     Process int_processes[] = {

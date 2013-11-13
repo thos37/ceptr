@@ -111,7 +111,7 @@ void dump_array_value(Receptor *r, ElementSurface *rs, void *surface) {
         while (count > 0) {
             printf("    ");
             dump_array_value(r,es,surface);
-            surface += _get_noun_size(r,repsNoun,surface);
+            surface += _new_get_noun_size(r,repsNoun,surface);
             count--;
         }
     }
@@ -147,35 +147,38 @@ void dump_xaddr(Receptor *r, Xaddr xaddr, int indent_level) {
     void *surface;
     int key = xaddr.key;
     int noun = xaddr.noun;
-    switch (noun) {
-        case PATTERN_SPEC:
+    if (1) {
+	if (noun == ELEMENT) {
+
+	}
+        else if (noun == PATTERN_SPEC) {
             dump_pattern_spec(r, (ElementSurface *)&r->data.cache[key]);
-            break;
-        case NOUN_SPEC:
+        }
+        else if(noun == NOUN_SPEC){
             ns = (NounSurface *) &r->data.cache[key];
             dump_noun(r, ns);
-            break;
-        case ARRAY_SPEC:
+        }
+	else if (noun == ARRAY_SPEC){
             dump_reps_spec(r, (ElementSurface *)&r->data.cache[key], "Array");
-            break;
-        case STRING_SPEC:
+	}
+	else if (noun == STRING_SPEC) {
             dump_reps_spec(r, (ElementSurface *)&r->data.cache[key], "String");
-            break;
-        default:
+        }
+	else {
             surface = op_get(r, noun_to_xaddr(noun));
             ns = (NounSurface *) surface;
             printf("%s : ", ns->label);
             es = (ElementSurface *) op_get(r, ns->namedElement);
-            switch(ns->namedElement.noun) {
-                case PATTERN_SPEC:
+	    Symbol n = ns->namedElement.noun;
+		if (n  == PATTERN_SPEC) {
                     dump_pattern_value(r, es, noun, op_get(r, xaddr));
-                    break;
-                case ARRAY_SPEC:
+                }
+                if (n == ARRAY_SPEC) {
                     dump_array_value(r,es,op_get(r,xaddr));
-                    break;
-                case STRING_SPEC:
+                }
+                if (n == STRING_SPEC) {
                     dump_string_value(r,es,op_get(r,xaddr));
-                    break;
+		}
             }
     }
 }

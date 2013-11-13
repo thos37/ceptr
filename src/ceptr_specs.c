@@ -56,7 +56,7 @@ void testArray() {
     int sky[] = {3,   2, 2,3, 40,50,   1,100,101,  4, 11,22, 33,44, 55,66, 77,88 };
     Xaddr myZodiac = _make_zodiac(r,CONSTELLATION,&ZODIAC,sky);
     int *arraySurface = (int *) op_get_array_nth(r, 2, myZodiac);
-    spec_is_true(_get_noun_size(r,ZODIAC,sky) == 18*sizeof(int));
+    spec_is_true(_new_get_noun_size(r,ZODIAC,sky) == 18*sizeof(int));
     spec_is_true(_op_get_array_length(arraySurface) == 4);
 }
 
@@ -85,7 +85,7 @@ void testString() {
     int * orionSurface = _make_string(r,_make_star_loc(r),&CONSTELLATION);
     spec_is_true(*orionSurface == 1);
     spec_is_true(*(orionSurface+8) == STRING_TERMINATOR);
-    spec_is_true(_get_noun_size(r,CONSTELLATION,orionSurface) == sizeof(int)*9);
+    spec_is_true(_new_get_noun_size(r,CONSTELLATION,orionSurface) == sizeof(int)*9);
 }
 
 void testPoint() {
@@ -210,12 +210,50 @@ void test_stack_dump() {
     dump_stack(r);
 }
 
+void test_elements() {
+    Receptor tr;init_data(&tr);init_elements(&tr);Receptor *r = &tr;
+    dump_xaddrs(r);
+}
+/*
+void test_pattern_spec() {
+    Receptor tr;init(&tr);Receptor *r = &tr;
+    spec_is_true(_get_noun_size(r,PATTERN_SPEC,op_get(r,r->intPatternSpecXaddr)) ==
+		 sizeof(ElementSurface) - sizeof(Process) + sizeof(Process)*3 +
+		 sizeof(PatternBody) - sizeof(Offset));
+    spec_is_true(_get_noun_size(r,PATTERN_SPEC,op_get(r,r->pointPatternSpecXaddr)) ==
+		 sizeof(ElementSurface) - sizeof(Process) + sizeof(Process)*1 +
+		 sizeof(PatternBody) - sizeof(Offset) + sizeof(Offset)*2);
+    spec_is_true(_get_noun_size(r,PATTERN_SPEC,op_get(r,r->linePatternSpecXaddr)) ==
+		 sizeof(ElementSurface) - sizeof(Process) + sizeof(Process)*1 +
+		 sizeof(PatternBody) - sizeof(Offset) + sizeof(Offset)*2);
+
+}
+
+void test_array_spec() {
+    Receptor tr;init(&tr);Receptor *r = &tr;
+    Symbol STAR_LOCATION =  op_new_noun(r, r->pointPatternSpecXaddr, "STAR_LOCATION");
+    Xaddr starLocArray = op_new_array(r, "STAR_LOCATION_ARRAY", STAR_LOCATION, 0, 0);
+
+    spec_is_true(_get_noun_size(r,ARRAY_SPEC,op_get(r,starLocArray)) ==
+		 sizeof(ElementSurface) - sizeof(Process) + sizeof(Process)*0 +
+		 sizeof(RepsBody));
+
+    Symbol CONSTELLATION = op_new_noun(r, starLocArray, "CONSTELLATION");
+    Xaddr constellationArray = op_new_array(r,"CONSTELLATION_ARRAY",CONSTELLATION,0,0);
+
+    spec_is_true(_get_noun_size(r,ARRAY_SPEC,op_get(r,constellationArray)) ==
+		 sizeof(ElementSurface) - sizeof(Process) + sizeof(Process)*0 +
+		 sizeof(RepsBody));
+}
+*/
+
 int main(int argc, const char **argv) {
     printf("Running all tests...\n\n");
-    test_xaddr_dump();
-    test_stack_dump();
+    test_elements();
+    //    test_xaddr_dump();
+    //test_stack_dump();
     testInt();
-    testPoint();
+  /*  testPoint();
     testInc();
     testAdd();
     testSemFault();
@@ -223,7 +261,7 @@ int main(int argc, const char **argv) {
     testSymbolPath();
     testArray();
     testString();
-    testRun();
+    testRun();*/
     int i;
     if (spec_failures > 0) {
         printf("\n%d out of %d specs failed:\n", spec_failures,spec_total);
