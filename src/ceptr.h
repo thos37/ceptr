@@ -17,4 +17,11 @@
 #include "mtree.h"
 #include "util.h"
 
+#ifdef __MACH__
+#include "mach_gettime.h"
+#include "fmemopen.h"
+#include <pthread.h>
+#endif
+
+
 #endif
